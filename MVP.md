@@ -24,7 +24,7 @@
 | 실행자 | 새로 이사 왔거나 주말에 근처를 둘러보고 싶은 사람 | 수현 (+ 인수 경합 시연용 민준) |
 
 ```
-[지연] 사연 입력 → AI 하루 카드 확인·수정 → 하루 공개
+[지연] 사연 입력 → AI와 함께 정리(질문에 답하기)·수정 → 하루 공개
 [수현] 둘러보기 → 하루 들여다보기 → 이어받기 → (산책) → 방문 기록 작성(+사진) → 전송
 [지연] 수신함 알림 → 돌아온 하루 읽기 → 한 줄 답장
 ```
@@ -35,17 +35,18 @@
 1. 로그인/회원가입 (Cognito, 닉네임 필수)
 2. 둘러보기: 이어받기 가능한 하루 목록
 3. 하루 들여다보기: 계획 상세, 이어받기, 경합 실패 안내
-4. 하루 남기기: 사연 입력 → AI 하루 카드 초안 → 편집 → 공개 (AI 실패 시 직접 작성으로 전환)
+4. 하루 남기기: 사연 입력 → AI 정리(질문 최대 2개, 건너뛰기 가능) → 편집 → 공개 (AI 실패 시 직접 작성으로 전환)
 5. 내 하루: 이어받은 하루와 기한, 이어받기 포기
 6. 방문 기록: 글 작성 + 선택 사진 1장 업로드, 사진 처리 대기/실패/교체, 글로 완료
 7. 수신함: 새 편지 / 읽은 기록 구분, 미확인 표시
 8. 돌아온 하루: 계획과 방문 기록 나란히 보기, 한 줄 답장
-9. 작성 소요 시간 측정 값 전송 (직접 작성 vs AI 초안 편집 비교용)
+9. 작성 소요 시간 측정 값 전송 (직접 작성 vs AI 정리 후 편집 비교용)
 
 ### 이후 (P1, 시간이 남으면)
 - 실행자가 계획자의 답장을 내 하루에서 확인
-- 하루 대표 사진 (시안의 커버 이미지). MVP에서는 기본 일러스트/플레이스홀더로 대체
-- 내가 남긴 하루 목록과 상태 보기
+- 다녀온 이야기 질문 도우미 (조건부): 방문 기록 작성 시 에이전트가 고른 질문에 실행자가 답하면, 답변을 고치지 않고 순서대로 이어 붙인 편지 초안을 준다. 시작 조건은 백엔드 `MVP.md` §3 P1을 따른다(하루 카드 에이전트가 T18–T22 통과, 백엔드 3·4단계 완료). 일정이 밀리면 가장 먼저 빼고, 90초 시연에는 넣지 않는다.
+- 하루 대표 사진 (시안의 커버 이미지). MVP에서는 기본 일러스트/플레이스홀더로 대체 — 이번 일정에서 하지 않음
+- 내가 남긴 하루 목록과 상태 보기 (`GET /me/plans`) — 이번 일정에서 하지 않음
 
 ### 제외
 - 지도·위치 기반 탐색, 여러 동네 선택 (MVP는 한 동네 고정)
@@ -84,8 +85,8 @@ VITE_USE_MOCK=false
 | 1 | 둘러보기 | `/` | 있음 | 이어받기 가능한 하루 카드 목록(제목, `summary`, 소요 시간, 장소 수), "취소된 하루 남기기" 버튼 |
 | 2 | 하루 들여다보기 | `/plans/:planId` | 있음 | 계획자 이름·취소한 이유(`reason`), 산책 동선(장소·하고 싶었던 일·고른 이유), "이 하루 이어받기" |
 | 2-1 | 이미 이어받은 하루 | 같은 경로, 상태 분기 | 있음 | 409 `ALREADY_CLAIMED`, 또는 `status === 'CLAIMED'`이고 내 것이 아닐 때 안내 + "다른 하루 둘러보기" |
-| 3 | 사연 입력 | `/plans/new` | **없음** | 자유 서술 입력, "AI로 하루 카드 만들기" / "직접 작성하기" |
-| 3-1 | AI 하루 카드 확인 | `/plans/new/card` | **없음** | 활동 목록·계획 이유·방문 질문 편집, 원문에 없던 항목 강조 |
+| 3 | 사연 입력 | `/plans/new` | **없음** | 자유 서술 입력, 국외 처리 안내, "AI와 함께 정리하기" / "직접 작성하기" |
+| 3-1 | AI와 함께 정리하기 | `/plans/new/card` | **없음** | 단계 칩, 질문 말풍선(선택지·직접 입력·건너뛰기), "이대로 카드 받기", 카드 미리보기, "AI가 바꾼 것" 메모(출처 칩, 다시 넣기), "폼에서 다듬기" |
 | 3-2 | 하루 남기기 (폼) | `/plans/new/form` | 있음 | 제목, 하고 싶었던 일 요약, 취소한 이유, 예상 소요 시간, 산책 동선(1~3곳), 방문 질문 |
 | 3-3 | 장소 추가 | `/plans/new/place` | 있음 | 장소 이름, 하고 싶었던 일, 이 장소를 고른 이유 |
 | 3-4 | 공개 완료 | `/plans/:planId/published` | 있음 | "둘러보기로 가기" |
@@ -130,25 +131,62 @@ VITE_USE_MOCK=false
 - 409 `CANNOT_CLAIM_OWN_PLAN`: 버튼 비노출이 정상이지만 방어적으로 토스트 처리.
 - 버튼은 요청 중 비활성화.
 
-### 6.3 하루 남기기 (AI 하루 카드 포함)
-흐름: **사연 입력 → (AI 초안 생성) → 카드 확인 → 폼 편집 → 공개**
+### 6.3 하루 남기기 (AI와 함께 정리하기 포함)
+흐름: **사연 입력 → (AI 정리: 질문에 답하기) → 카드 확인 → 폼 편집 → 공개**
 
 - 사연 입력(최대 1,000자). 공개 장소만 적도록 안내 문구 표시 ("집 주소나 개인 정보는 적지 말아주세요").
-- "AI로 하루 카드 만들기" → `POST /ai/day-card { story }`.
-  - 성공: 응답 `card`의 필드 이름이 `POST /plans` 요청과 같으므로(`title`, `summary`, `reason`, `estimatedMinutes`, `places[].name/activity/whyChosen`, `question`) 그대로 폼 초기값으로 쓴다. `null`인 값은 빈칸.
-  - 응답의 `flags[].path`(예: `places[0].name`)를 같은 경로의 입력칸에 연결한다. `NOT_IN_SOURCE` → "원문에 없던 내용이에요, 확인해 주세요", `MISSING` → "직접 채워주세요".
-  - 응답의 `draftId`는 공개 요청의 `authoring.aiDraftId`로 보낸다.
-  - 실패(`AI_UNAVAILABLE`, `AI_INVALID_OUTPUT`, 타임아웃, 5xx): **입력한 사연을 그대로 유지**하고 "AI 카드를 만들지 못했어요. 직접 정리해 주세요" 안내 후 빈 폼(사연은 참고용으로 상단에 표시)으로 이동. 이때 `mode`는 `MANUAL`.
+- 사연 입력 화면에 "AI 정리 요청은 국외 리전에서 처리될 수 있어요" 안내를 둔다(문구·위치는 `docs/REQUIREMENTS.md` Q6).
 - "직접 작성하기"는 AI 호출 없이 폼으로 이동. `summary` 기본값으로 사연 앞부분을 채운다.
+
+**AI와 함께 정리하기 (화면 3-1, 세션 상태 머신)**
+
+"AI와 함께 정리하기" → `POST /ai/card-sessions { story }` → `SessionView`. HTTP 요청 1번이 에이전트 1턴이다. 이후 모든 응답의 `status`로만 분기하고, 응답의 `turn`을 다음 요청의 `expectedTurn`으로 그대로 쓴다.
+
+```
+POST /ai/card-sessions ─▶ WORKING ──(자동) turns { expectedTurn } ─────────────────▶ 다시 분기
+                          │         연속 2회 WORKING이면 turns { expectedTurn, finish: true }
+                          ├ ASKING ── 답하기 / 건너뛰기 / "이대로 카드 받기" ─▶ turns ─▶ 다시 분기
+                          ├ READY ─── 카드 미리보기 + 메모 ─▶ "폼에서 다듬기" ─▶ 폼(3-2)
+                          └ FAILED(503 AI_UNAVAILABLE) ─▶ 사연 유지, 직접 작성 폼
+```
+
+- 생성 응답이 바로 `READY`일 수 있다(레벨 0, `AGENT_MODE=pipeline`). 화면은 어떤 응답에서든 네 상태를 모두 처리한다. 레벨 0에서는 질문 말풍선만 나오지 않는다.
+- **단계 칩**: `trace[]` 항목 하나를 칩 하나로, `summary`를 칩 문구로 써서 `step` 순서대로 켠다(백엔드 `MVP.md` §7.2 예시 기준: "'골목 빵집' 원문에 없음, 소요 시간 정보 없음 → '출근길 빵집'으로 고침, 개인정보 확인 통과 → 소요 시간 질문"). 응답마다 새로 붙은 단계만 이어서 켠다. 스트리밍은 없다. MSW `ai-ask`도 이 예시를 따른다.
+- **WORKING**: 단계 칩을 보여 주며 `answer` 없이 `turns { expectedTurn }`를 자동으로 보낸다. `WORKING`을 연속 2회 받으면 다음 요청에 `finish: true`를 넣고, 그 뒤 `WORKING`이 와도 `finish: true`로 이어서 보낸다(서버가 finish를 세션에 기록하고 모델 호출 예산 안에서 `READY`로 끝낸다). 연속 횟수는 다른 상태를 받으면 0으로 되돌린다.
+- **ASKING**: 질문 말풍선을 띄운다. 요청 중에는 말풍선의 답변·건너뛰기 버튼을 비활성화한다.
+  - `question.text`, 보조 문구로 `question.reason`.
+  - `options[]`를 선택지 버튼으로 → `answer: { questionId, choice }`.
+  - `allowFreeText === true`일 때만 직접 입력칸(1–100자) → `answer: { questionId, text }`.
+  - "건너뛰기" → `answer: { questionId, skipped: true }`. 건너뛴 필드는 폼에서 `MISSING`으로 남는다.
+  - "이대로 카드 받기" → `turns { expectedTurn, finish: true }`. `answer` 없이 보내면 현재 질문은 건너뛴 것으로 처리된다. 이 버튼은 WORKING 중에도 보이고 요청 중에도 누를 수 있다. 요청 중에 누르면 다음 요청에 `finish: true`를 예약만 한다(중복 예약 방지).
+  - 예: "빵집과 하천 벤치까지, 산책은 대략 얼마나 걸릴 예정이었나요?" [30분] [45분] [1시간]. 비공개 장소 질문은 "[동선에서 빼기] [직접 바꾸기(입력)]" 형태로 온다.
+- **READY**: 카드 미리보기와 "AI가 바꾼 것" 메모를 보여 주고 "폼에서 다듬기"로 폼(3-2)에 간다. 모드는 `AI_EDITED`.
+  - `card`의 필드 이름이 `POST /plans` 요청과 같으므로(`title`, `summary`, `reason`, `estimatedMinutes`, `places[].name/activity/whyChosen`, `question`) 그대로 폼 초기값으로 쓴다. `null`인 값은 빈칸.
+  - `flags`에 `NOT_IN_SOURCE`가 없으면 카드 미리보기에 "원문 대조 통과" 배지를 붙인다. "0건 보장" 같은 문구는 쓰지 않는다.
+  - `flags[].path`(예: `places[0].name`)를 폼의 같은 경로 입력칸에 연결한다. `NOT_IN_SOURCE` → "원문에 없던 내용이에요, 확인해 주세요", `MISSING` → "직접 채워주세요", `PRIVACY` → "공개하기 어려운 정보일 수 있어요".
+  - 메모: `notes[]`마다 `reason`과 출처 칩(`STORY` → "원문", `ANSWER` → "내 답변")을 붙인다. 예: "'골목 빵집' 대신 원문의 '출근길 빵집'으로 적었어요 · 원문".
+  - `action === 'REMOVED'` 메모에는 "다시 넣기" 버튼을 둔다. 누르면 그 항목을 폼에 되살리고 `PRIVACY` 또는 `NOT_IN_SOURCE` 경고를 함께 붙인다(복원할 값·유형·위치는 `docs/REQUIREMENTS.md` Q7).
+  - `degraded === true`여도 같은 화면이다. 남은 `flags`가 폼에 그대로 연결된다.
+- **동시 요청·재동기화**
+  - 409 `AI_SESSION_BUSY` → 2초 뒤 `GET /ai/card-sessions/{sessionId}`로 다시 맞추고 그 상태로 분기한다.
+  - 재동기화 `GET`이 보낸 `expectedTurn`과 같은 `turn`의 `WORKING`이면 다른 요청이 아직 처리 중이다(서버는 잠금을 잡을 때 `WORKING`으로 바꾼다). 2초 간격으로 `GET`을 반복하고, 이 응답은 연속 `WORKING` 횟수에 넣지 않는다. 잠금 시간(30초)이 지나도 같으면 `turns { expectedTurn }`를 다시 보낸다.
+  - 409 `AI_SESSION_CLOSED` → `GET`으로 현재 상태(`READY`·`FAILED`)를 받아 보여 준다.
+  - 보낸 `expectedTurn`이 이미 지난 턴이면 서버가 모델을 부르지 않고 현재 `SessionView`를 200으로 돌려준다. 프론트는 받은 응답으로 그대로 분기한다.
+- **새로고침 복구**: 3-1에 들어올 때 작성 중 상태에 `sessionId`가 있고 `READY` 카드가 없으면 `GET /ai/card-sessions/{sessionId}`로 상태를 받아 이어간다(`WORKING`이면 자동 요청 재개).
+- **실패**(`FAILED`/503 `AI_UNAVAILABLE`, 502 `AI_INVALID_OUTPUT`, 429 `AI_QUOTA_EXCEEDED`, 세션 404 `NOT_FOUND`, 타임아웃, 그 외 5xx): **입력한 사연을 그대로 유지**하고 "AI 카드를 만들지 못했어요. 직접 정리해 주세요" 안내 후 빈 폼(사연은 참고용으로 상단에 표시)으로 이동. 이때 `mode`는 `MANUAL`이고 `aiSessionId`는 보내지 않는다.
+- 요청당 응답은 30초 안에 정해진 코드로 온다(백엔드 `MVP.md` §7.2 12초 규칙). AI 세션 요청의 클라이언트 타임아웃은 30초보다 길게 잡는다.
+- `turns` 요청이 네트워크 오류·클라이언트 타임아웃으로 끝나면 바로 직접 작성으로 가지 않고 `GET`으로 한 번 재동기화한 뒤 그 상태로 분기한다. `GET`도 실패하면 위 실패 처리를 따른다.
+
+**폼과 공개**
 - 폼 검증: 제목 1–40자, 하고 싶었던 일 요약(`summary`) 1–120자, 취소한 이유 1–300자, 예상 소요 시간 10–240분, 장소 1–3곳(이름 1–30자, 하고 싶었던 일 1–60자, 고른 이유 0–120자), 방문 질문 1–80자(필수, 1개).
 - 사연(1–1,000자)은 두 방식 모두 필수다. 원문에 없던 장소·활동 건수를 서버가 두 방식 모두에 대해 계산하기 때문이다.
-- **작성 중 상태 보관**: 사연, `draftId`, AI 카드, `flags`, 폼 값, `startedAt`, `idempotencyKey`를 하나의 상태로 묶어 `sessionStorage`에 저장한다(장소 추가 화면 이동·새로고침에도 유지). 공개에 성공하면 삭제.
+- **작성 중 상태 보관**: 사연, `sessionId`, 마지막 `turn`, READY 카드, `flags`, `notes`, 폼 값, `startedAt`, `idempotencyKey`를 하나의 상태로 묶어 `sessionStorage`에 저장한다(장소 추가 화면 이동·새로고침에도 유지). 공개에 성공하면 삭제.
 - **공개**: `POST /plans`, 헤더 `Idempotency-Key`.
   - 키는 "이 하루 공개하기"를 누를 때 요청 본문과 함께 만들어 보관하고, 같은 본문을 재전송할 때만 재사용한다. 폼 내용이 바뀌면 새 UUID를 만든다.
   - 409 `IDEMPOTENCY_CONFLICT`를 받으면 새 키로 한 번 다시 요청한다.
-- **작성 시간 측정**: `startedAt`은 사연 입력 화면에 처음 들어올 때 한 번만 기록하고(하위 경로 이동 시 재설정하지 않음), 공개 요청에 `authoring`으로 함께 전송한다.
+- **작성 시간 측정**: `startedAt`은 사연 입력 화면에 처음 들어올 때 한 번만 기록하고(하위 경로 이동 시 재설정하지 않음), 공개 요청에 `authoring`으로 함께 전송한다. `aiSessionId`는 `AI_EDITED`일 때만 넣는다. 질문 대기·편집 시간 분해(`agentWaitMs`, `answerWaitMs`, `editMs`)는 서버가 세션 기록으로 계산한다.
   ```json
-  "authoring": { "mode": "AI_EDITED" | "MANUAL", "durationMs": 183000, "aiDraftId": "..." | null, "story": "사연 원문" }
+  "authoring": { "mode": "AI_EDITED" | "MANUAL", "durationMs": 183000, "aiSessionId": "ais_...", "story": "사연 원문" }
   ```
 
 ### 6.4 내 하루 / 이어받기 포기
@@ -200,7 +238,9 @@ VITE_USE_MOCK=false
 | GET | `/me` | 내 프로필(닉네임), 미확인 수신함 수 |
 | GET | `/plans?status=OPEN` | 둘러보기 목록 |
 | GET | `/plans/{planId}` | 하루 상세 (`isOwner`, `myClaim` 포함) |
-| POST | `/ai/day-card` | 사연 → AI 하루 카드 초안 |
+| POST | `/ai/card-sessions` | 사연 → AI 정리 세션 생성 (`SessionView`) |
+| POST | `/ai/card-sessions/{sessionId}/turns` | 다음 턴: `{ expectedTurn, answer?, finish? }` |
+| GET | `/ai/card-sessions/{sessionId}` | 세션 상태 조회 (새로고침 복구·재동기화) |
 | POST | `/plans` | 하루 공개 |
 | POST | `/plans/{planId}/claims` | 이어받기 |
 | GET | `/me/claims?status=ACTIVE` | 내 하루 |
@@ -219,7 +259,7 @@ VITE_USE_MOCK=false
 | code | 처리 |
 |---|---|
 | `UNAUTHORIZED` (401) | `/login?redirect=현재경로` |
-| `NOT_FOUND` (404) | "찾을 수 없어요" 안내 후 둘러보기/수신함 |
+| `NOT_FOUND` (404) | "찾을 수 없어요" 안내 후 둘러보기/수신함. AI 세션 경로는 AI 실패와 같이 사연 유지, 직접 작성 폼으로 |
 | `FORBIDDEN` (403) | 안내 후 둘러보기 |
 | `VALIDATION_ERROR` | `details`의 필드별 메시지를 입력칸에 표시 |
 | `ALREADY_CLAIMED` | 2-1 화면 |
@@ -228,6 +268,9 @@ VITE_USE_MOCK=false
 | `RECORD_REQUIRED` | `PUT /record` 후 `complete` 1회 재시도 |
 | `IDEMPOTENCY_CONFLICT` | 새 키로 1회 재요청 |
 | `AI_UNAVAILABLE`, `AI_INVALID_OUTPUT` | 사연 유지, 직접 작성 폼으로 |
+| `AI_QUOTA_EXCEEDED` (429) | 사연 유지, 직접 작성 폼으로 (사용자당 하루 10세션 초과) |
+| `AI_SESSION_BUSY` (409) | 2초 뒤 `GET /ai/card-sessions/{sessionId}`로 재동기화 |
+| `AI_SESSION_CLOSED` (409) | `GET` 후 현재 상태(`READY`·`FAILED`) 표시 |
 | `REPLY_ALREADY_SENT` | "보낸 답장" 상태로 전환 |
 | `TRY_AGAIN` (503) | 같은 요청 1회 재시도 후 실패 시 토스트 |
 
@@ -260,7 +303,7 @@ src/
   components/     # Header, BottomTab, StatusBadge, RouteTimeline, PrimaryButton, ...
   pages/
     browse/       # 둘러보기
-    plan/         # 상세, 작성(사연·AI 카드·폼·장소 추가·공개 완료)
+    plan/         # 상세, 작성(사연·AI 정리·폼·장소 추가·공개 완료)
     me/           # 내 하루, 포기
     record/       # 작성, 보내는 중, 실패, 교체, 완료
     inbox/        # 목록, 돌아온 하루
@@ -270,12 +313,14 @@ src/
 
 ## 10. 완료 기준 (Definition of Done)
 
-- [ ] 데모 계정 3개(지연, 수현, 민준)로 90초 시연 시나리오가 끊김 없이 동작한다: 지연 사연 입력 → AI 카드 확인 → 공개 → 수현·민준 동시 이어받기 → 수현 방문 기록(사진) 전송 → 지연 수신함 확인 → 답장
+- [ ] 데모 계정 3개(지연, 수현, 민준)로 90초 시연 시나리오가 끊김 없이 동작한다: 지연 사연 입력 → AI와 함께 정리(질문 1개) → 공개 → 수현·민준 동시 이어받기 → 수현 방문 기록(사진) 전송 → 지연 수신함 확인 → 답장
 - [ ] 수현·민준 두 브라우저에서 같은 하루를 동시에 이어받으면 한 명만 확정되고, 다른 쪽은 "이미 다른 사람이 이어받았어요" 화면을 본다
 - [ ] 완료 버튼을 여러 번 눌러도 수신함 항목은 한 건이다
 - [ ] 사진 처리 실패 시 작성한 글이 남아 있고, 사진 교체 또는 글로 완료가 가능하다
 - [ ] 사진 없이 "글로 완료"해도 바로 전송된다 (`PUT /record` → `complete`)
-- [ ] AI 생성 실패 시 사연이 유지되고 직접 작성으로 넘어갈 수 있다
+- [ ] AI 정리 실패(`FAILED`, 한도 초과 포함) 시 사연이 유지되고 직접 작성으로 넘어갈 수 있다
+- [ ] AI 정리 중 새로고침해도 세션이 복구된다
+- [ ] 질문 건너뛰기와 "이대로 카드 받기"로 언제든 폼에 들어갈 수 있다
 - [ ] 공개 요청에 `authoring.mode`, `durationMs`, `story`가 포함된다
 - [ ] 하루 남기기 도중 새로고침해도 입력값과 측정 시작 시각이 유지된다
 - [ ] 360–480px 폭 모바일 브라우저에서 시안과 같은 배치로 보인다
@@ -288,5 +333,5 @@ src/
 3. 하루 남기기 폼·장소 추가·공개 완료 (직접 작성 경로 먼저)
 4. 내 하루 / 포기 → 방문 기록 작성(글만) → 수신함 → 돌아온 하루·답장
 5. 사진 업로드·폴링·실패·교체 화면
-6. AI 하루 카드 화면, 작성 시간 측정
+6. AI 정리 화면(세션 상태 머신), 작성 시간 측정
 7. Cognito 연동, 실제 API 전환, CloudFront 배포, 시연 리허설
