@@ -64,6 +64,7 @@
 | 인증 | AWS Amplify `aws-amplify/auth` (Auth 모듈만) | Cognito User Pool, ID 토큰을 `Authorization` 헤더로 전달 |
 | 스타일 | CSS Modules 또는 Tailwind (팀 합의) | 모바일 우선, 최대 폭 480px 가운데 정렬 |
 | API 목업 | MSW | 백엔드 배포 전 계약 기준으로 개발 |
+| 로컬 백엔드 (선택) | 백엔드 docker compose (API `http://localhost:3000`, Floci Cognito·S3 `http://localhost:4566`) | 백엔드 기능이 로컬에 올라온 뒤 실제 흐름 확인. 백엔드 `docs/DEVELOPMENT_PLAN.md` 10.6 |
 | 배포 | S3(비공개) + CloudFront | 버킷·배포는 백엔드 SAM 스택이 생성, 이 저장소는 빌드 산출물 sync |
 
 환경 변수
@@ -72,8 +73,22 @@ VITE_API_BASE_URL=
 VITE_AWS_REGION=ap-northeast-2
 VITE_COGNITO_USER_POOL_ID=
 VITE_COGNITO_CLIENT_ID=
+VITE_COGNITO_ENDPOINT=        # 로컬 백엔드 모드만 http://localhost:4566, dev/demo 스택은 비움
+VITE_AUTH_MODE=cognito        # cognito / dev-jwt (로컬 백엔드 모드 전용)
 VITE_USE_MOCK=false
 ```
+- `VITE_*` 값은 빌드 산출물에 그대로 들어가므로 비밀값(LLM API 키 등)을 두지 않는다. LLM 공급자 설정(`LLM_*`)은 백엔드에만 있다.
+
+### 개발 연동 모드
+
+| 모드 | API | 인증 | 쓰는 때 |
+|---|---|---|---|
+| MSW 목업 | 브라우저 안 목업 | 목업 | S0부터, 계약 기준 화면 개발 |
+| 로컬 백엔드 | `http://localhost:3000`(어댑터) 또는 Vite 프록시 | Floci Cognito(`http://localhost:4566`)의 시드 사용자, 또는 dev JWT | 백엔드 기능이 로컬에 올라온 뒤 실제 흐름 확인 |
+| `dev`/`demo` 스택 | SAM 출력 `ApiUrl` | 실제 Cognito(`UserPoolId`, `UserPoolClientId`) | S1–S5 연동, 리허설, 시연 |
+
+- 로컬 백엔드(docker compose)는 개발과 단위·로컬 통합 테스트용이다. 데모·시범 운영은 실제 AWS에 SAM으로 배포한 `dev`/`demo` 스택에서 하고, 계약 비교(S2·S3·S4)도 `dev` 스택 응답으로 한다(데모까지 Docker로 운영하는 대안은 `docs/REQUIREMENTS.md` Q9).
+- 모드별 설정값, 로컬 인증(시드 사용자·dev JWT), 로컬에서 확인할 수 없는 항목은 `docs/DEVELOPMENT_PLAN.md` 4.1을 따른다.
 
 ## 5. 화면 목록
 
@@ -85,7 +100,7 @@ VITE_USE_MOCK=false
 | 1 | 둘러보기 | `/` | 있음 | 이어받기 가능한 하루 카드 목록(제목, `summary`, 소요 시간, 장소 수), "취소된 하루 남기기" 버튼 |
 | 2 | 하루 들여다보기 | `/plans/:planId` | 있음 | 계획자 이름·취소한 이유(`reason`), 산책 동선(장소·하고 싶었던 일·고른 이유), "이 하루 이어받기" |
 | 2-1 | 이미 이어받은 하루 | 같은 경로, 상태 분기 | 있음 | 409 `ALREADY_CLAIMED`, 또는 `status === 'CLAIMED'`이고 내 것이 아닐 때 안내 + "다른 하루 둘러보기" |
-| 3 | 사연 입력 | `/plans/new` | **없음** | 자유 서술 입력, 국외 처리 안내, "AI와 함께 정리하기" / "직접 작성하기" |
+| 3 | 사연 입력 | `/plans/new` | **없음** | 자유 서술 입력, 외부 AI 전송 안내, "AI와 함께 정리하기" / "직접 작성하기" |
 | 3-1 | AI와 함께 정리하기 | `/plans/new/card` | **없음** | 단계 칩, 질문 말풍선(선택지·직접 입력·건너뛰기), "이대로 카드 받기", 카드 미리보기, "AI가 바꾼 것" 메모(출처 칩, 다시 넣기), "폼에서 다듬기" |
 | 3-2 | 하루 남기기 (폼) | `/plans/new/form` | 있음 | 제목, 하고 싶었던 일 요약, 취소한 이유, 예상 소요 시간, 산책 동선(1~3곳), 방문 질문 |
 | 3-3 | 장소 추가 | `/plans/new/place` | 있음 | 장소 이름, 하고 싶었던 일, 이 장소를 고른 이유 |
@@ -135,7 +150,7 @@ VITE_USE_MOCK=false
 흐름: **사연 입력 → (AI 정리: 질문에 답하기) → 카드 확인 → 폼 편집 → 공개**
 
 - 사연 입력(최대 1,000자). 공개 장소만 적도록 안내 문구 표시 ("집 주소나 개인 정보는 적지 말아주세요").
-- 사연 입력 화면에 "AI 정리 요청은 국외 리전에서 처리될 수 있어요" 안내를 둔다(문구·위치는 `docs/REQUIREMENTS.md` Q6).
+- 사연 입력 화면에 외부 AI 전송 안내를 둔다. 예: "AI와 함께 정리하기를 누르면 사연이 외부 AI 서비스(<공급자명>, <처리 국가>)로 전송되고, 공급자 정책에 따라 최대 N일 보관될 수 있어요." 공급자에 따라 국외 전송·보존 정책이 다르므로 `<공급자명>`·`<처리 국가>`·`N`은 백엔드가 공급자를 정한 뒤(백엔드 `LLM_PROVIDER_LABEL`과 같은 값) 채운다(문구·위치는 `docs/REQUIREMENTS.md` Q6).
 - "직접 작성하기"는 AI 호출 없이 폼으로 이동. `summary` 기본값으로 사연 앞부분을 채운다.
 
 **AI와 함께 정리하기 (화면 3-1, 세션 상태 머신)**
@@ -174,7 +189,7 @@ POST /ai/card-sessions ─▶ WORKING ──(자동) turns { expectedTurn } ─�
   - 보낸 `expectedTurn`이 이미 지난 턴이면 서버가 모델을 부르지 않고 현재 `SessionView`를 200으로 돌려준다. 프론트는 받은 응답으로 그대로 분기한다.
 - **새로고침 복구**: 3-1에 들어올 때 작성 중 상태에 `sessionId`가 있고 `READY` 카드가 없으면 `GET /ai/card-sessions/{sessionId}`로 상태를 받아 이어간다(`WORKING`이면 자동 요청 재개).
 - **실패**(`FAILED`/503 `AI_UNAVAILABLE`, 502 `AI_INVALID_OUTPUT`, 429 `AI_QUOTA_EXCEEDED`, 세션 404 `NOT_FOUND`, 타임아웃, 그 외 5xx): **입력한 사연을 그대로 유지**하고 "AI 카드를 만들지 못했어요. 직접 정리해 주세요" 안내 후 빈 폼(사연은 참고용으로 상단에 표시)으로 이동. 이때 `mode`는 `MANUAL`이고 `aiSessionId`는 보내지 않는다.
-- 요청당 응답은 30초 안에 정해진 코드로 온다(백엔드 `MVP.md` §7.2 12초 규칙). AI 세션 요청의 클라이언트 타임아웃은 30초보다 길게 잡는다.
+- 요청당 응답은 30초 안에 정해진 코드로 온다(백엔드 `MVP.md` §7.2 12초 규칙). AI 세션 요청의 클라이언트 타임아웃은 30초보다 길게 잡는다. 로컬 백엔드 모드의 LLM 기본값은 Fake 채팅 모델이다. 백엔드가 네이티브 Ollama를 붙이면 read 타임아웃과 어댑터 실행 시간을 늘리므로 30초 상한이 지켜지지 않을 수 있다. 타임아웃 동작은 `dev` 스택에서 확인한다.
 - `turns` 요청이 네트워크 오류·클라이언트 타임아웃으로 끝나면 바로 직접 작성으로 가지 않고 `GET`으로 한 번 재동기화한 뒤 그 상태로 분기한다. `GET`도 실패하면 위 실패 처리를 따른다.
 
 **폼과 공개**
@@ -212,6 +227,7 @@ POST /ai/card-sessions ─▶ WORKING ──(자동) turns { expectedTurn } ─�
 - 작성 화면 진입 시 `GET /claims/{claimId}/record`로 서버에 저장된 글을 먼저 채우고, 없을 때만 `localStorage` 임시 글을 쓴다. 임시 글은 전송 완료·종료 안내 시 삭제.
 - 글 1–1,000자. 사진은 JPEG/PNG, 10MB 이하, 1장. 클라이언트에서 크기·형식 1차 검증.
 - `PUT /claims/{claimId}/record` 응답의 `upload`로 `fetch(upload.url, { method: 'PUT', body: file, headers: upload.headers })`. 업로드 실패 시 실패 화면과 동일하게 처리.
+- `upload.url`의 호스트·경로는 바꾸지 않는다. 로컬 백엔드 모드에서는 presigned URL이 `http://localhost:4566` 호스트와 경로 방식 주소로 서명되어 오고, host도 서명에 들어간다.
 - 사진 교체: `POST /claims/{claimId}/record/photo` → 새 업로드 URL로 다시 업로드 → 보내는 중.
 - 폴링 응답(`GET /record`) 판정 순서 — 위에서부터 먼저 맞는 것:
   1. `delivered === true` → 전송 완료 (`photoStatus === 'READY'`면 사진+글 문구, 아니면 글 문구)
@@ -267,7 +283,7 @@ POST /ai/card-sessions ─▶ WORKING ──(자동) turns { expectedTurn } ─�
 | `CLAIM_NOT_ACTIVE` | 포기 화면: 새로고침 / 기록·사진·완료: 화면 8 |
 | `RECORD_REQUIRED` | `PUT /record` 후 `complete` 1회 재시도 |
 | `IDEMPOTENCY_CONFLICT` | 새 키로 1회 재요청 |
-| `AI_UNAVAILABLE`, `AI_INVALID_OUTPUT` | 사연 유지, 직접 작성 폼으로 |
+| `AI_UNAVAILABLE`, `AI_INVALID_OUTPUT` | 사연 유지, 직접 작성 폼으로 (503 `AI_UNAVAILABLE` = LLM API 오류·타임아웃이고 후보 카드 없음) |
 | `AI_QUOTA_EXCEEDED` (429) | 사연 유지, 직접 작성 폼으로 (사용자당 하루 10세션 초과) |
 | `AI_SESSION_BUSY` (409) | 2초 뒤 `GET /ai/card-sessions/{sessionId}`로 재동기화 |
 | `AI_SESSION_CLOSED` (409) | `GET` 후 현재 상태(`READY`·`FAILED`) 표시 |
@@ -299,7 +315,7 @@ POST /ai/card-sessions ─▶ WORKING ──(자동) turns { expectedTurn } ─�
 ```
 src/
   api/            # fetch 클라이언트, 타입(백엔드 계약과 동일), TanStack Query 훅
-  auth/           # Amplify 설정, 로그인 가드
+  auth/           # Amplify 설정(로컬 엔드포인트 포함), 로그인 가드, dev JWT(로컬 백엔드 모드 전용)
   components/     # Header, BottomTab, StatusBadge, RouteTimeline, PrimaryButton, ...
   pages/
     browse/       # 둘러보기
@@ -334,4 +350,4 @@ src/
 4. 내 하루 / 포기 → 방문 기록 작성(글만) → 수신함 → 돌아온 하루·답장
 5. 사진 업로드·폴링·실패·교체 화면
 6. AI 정리 화면(세션 상태 머신), 작성 시간 측정
-7. Cognito 연동, 실제 API 전환, CloudFront 배포, 시연 리허설
+7. Cognito 연동, 실제 API 전환, CloudFront 배포, 시연 리허설 (백엔드 로컬 환경이 먼저 뜨면 로그인·API 연결은 로컬 백엔드 모드에서 앞당겨 확인할 수 있다)

@@ -13,7 +13,7 @@ AWS Skill Training 1조 프로젝트 **"취소된 하루를 양도합니다"** �
 |---|---|
 | [`MVP.md`](./MVP.md) | MVP 범위, 화면 목록과 화면별 동작, 디자인 가이드 |
 | [`docs/REQUIREMENTS.md`](./docs/REQUIREMENTS.md) | 요구사항 명세서 (`FE-*` ID, 인수 기준, 확인이 필요한 사항) |
-| [`docs/DEVELOPMENT_PLAN.md`](./docs/DEVELOPMENT_PLAN.md) | 개발계획서 (7단계 작업, 백엔드 연동 지점 S0–S5, 테스트 전략) |
+| [`docs/DEVELOPMENT_PLAN.md`](./docs/DEVELOPMENT_PLAN.md) | 개발계획서 (7단계 작업, 백엔드 연동 지점 S0–S5, 개발 연동 모드(4.1), 테스트 전략) |
 
 ## 관련 저장소
 
@@ -30,6 +30,7 @@ AWS Skill Training 1조 프로젝트 **"취소된 하루를 양도합니다"** �
 | 인증 | AWS Amplify `aws-amplify/auth` (Cognito User Pool, ID 토큰 사용) |
 | 스타일 | CSS Modules 또는 Tailwind (팀 합의 예정) |
 | API 목업 | MSW |
+| 로컬 백엔드 (선택) | 백엔드 docker compose (AWS 호환 에뮬레이터 Floci, API `http://localhost:3000`) |
 | 배포 | S3(비공개) + CloudFront (백엔드 SAM 스택이 생성) |
 
 ## 진행 상황
@@ -54,13 +55,28 @@ AWS Skill Training 1조 프로젝트 **"취소된 하루를 양도합니다"** �
 | `VITE_AWS_REGION` | `ap-northeast-2` |
 | `VITE_COGNITO_USER_POOL_ID` | 백엔드 SAM 출력값 `UserPoolId` |
 | `VITE_COGNITO_CLIENT_ID` | 백엔드 SAM 출력값 `UserPoolClientId` |
+| `VITE_COGNITO_ENDPOINT` | 로컬 백엔드 모드만 `http://localhost:4566`(Floci Cognito). `dev`/`demo` 스택은 비움 |
+| `VITE_AUTH_MODE` | `cognito`(기본) / `dev-jwt`(로컬 백엔드 모드 전용, 개발 빌드에서만 동작) |
 | `VITE_USE_MOCK` | `true`면 백엔드 없이 MSW 목업으로 동작 |
+
+로컬 백엔드 모드에서는 `VITE_API_BASE_URL=http://localhost:3000`, User Pool ID·App Client ID는 백엔드 init 스크립트가 출력한 로컬 값을 씁니다. `VITE_*` 값은 빌드 산출물에 들어가므로 비밀값(LLM API 키 등)을 넣지 않습니다.
 
 백엔드가 배포되기 전에는 `VITE_USE_MOCK=true`로 모든 화면을 개발합니다.
 
 ## 실행 방법
 
-1단계 이후 추가
+1단계 이후 추가 (호스트에서 `npm run dev`, Vite `http://localhost:5173`)
+
+연동 모드는 세 가지입니다. 모드별 설정값과 로컬 인증 방식은 [`docs/DEVELOPMENT_PLAN.md`](./docs/DEVELOPMENT_PLAN.md) 4.1을 따릅니다.
+
+| 모드 | API | 인증 | 쓰는 때 |
+|---|---|---|---|
+| MSW 목업 | 브라우저 안 목업 | 목업 | S0부터, 계약 기준 화면 개발 |
+| 로컬 백엔드 | `http://localhost:3000`(어댑터) 또는 Vite 프록시 | Floci Cognito(`http://localhost:4566`)의 시드 사용자, 또는 dev JWT | 백엔드 기능이 로컬에 올라온 뒤 실제 흐름 확인 |
+| `dev`/`demo` 스택 | SAM 출력 `ApiUrl` | 실제 Cognito(`UserPoolId`, `UserPoolClientId`) | S1–S5 연동, 리허설, 시연 |
+
+- 로컬 백엔드는 백엔드 저장소의 `docker compose up`으로 띄웁니다. 개발과 로컬 통합 확인용이며, 계약 비교·인수 판정·데모는 실제 AWS에 SAM으로 배포한 `dev`/`demo` 스택에서 합니다.
+- 로컬에서는 회원가입 자동 확인이 동작하지 않으므로 시드 사용자로 로그인합니다.
 
 ## 빌드·배포
 
@@ -71,6 +87,6 @@ AWS Skill Training 1조 프로젝트 **"취소된 하루를 양도합니다"** �
 자세한 내용은 [`docs/DEVELOPMENT_PLAN.md`](./docs/DEVELOPMENT_PLAN.md) 7장을 따릅니다.
 
 - `main`은 항상 빌드 가능한 상태로 유지하고, 작업은 `feat/<단계>-<요약>` 브랜치(예: `feat/5-photo-polling`)에서 PR로 병합합니다.
-- PR 본문에 관련 요구사항 ID(`FE-*`), 확인한 화면 번호, 목업/실제 API 중 어디서 확인했는지 적습니다. 화면 변경은 390px 폭 스크린샷을 첨부합니다.
+- PR 본문에 관련 요구사항 ID(`FE-*`), 확인한 화면 번호, 어느 연동 모드(MSW 목업 / 로컬 백엔드 / `dev` 스택)에서 확인했는지 적습니다. 화면 변경은 390px 폭 스크린샷을 첨부합니다.
 - 커밋 메시지 접두어: `feat:`, `fix:`, `test:`, `style:`, `chore:`, `docs:`
 - 실제 API URL, User Pool ID, 테스트 계정 정보는 저장소에 올리지 않습니다.
